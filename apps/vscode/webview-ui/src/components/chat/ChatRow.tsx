@@ -978,7 +978,12 @@ export const ChatRowContent = memo(
 					}
 					case "plan_completion_result":
 						// Turn-final plan-mode response inferred at turn end (SDK path)
-						return <PlanCompletionOutputRow text={message.text || ""} />
+						return (
+							<PlanCompletionOutputRow
+								showImplement={isLast && message.partial !== true && mode === "plan"}
+								text={message.text || ""}
+							/>
+						)
 					case "shell_integration_warning":
 						return (
 							<div className="flex flex-col bg-warning/20 p-2 rounded-xs border border-error">

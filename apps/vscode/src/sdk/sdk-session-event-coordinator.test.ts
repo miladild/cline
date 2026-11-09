@@ -91,6 +91,22 @@ describe("SdkSessionEventCoordinator", () => {
 		expect(options.sessions.setRunning).toHaveBeenCalledWith(false)
 	})
 
+	it("notifies the host when a plan-mode turn presents a plan", async () => {
+		const onPlanTurnCompleted = vi.fn()
+		const { coordinator, event } = makeCoordinator({
+			onPlanTurnCompleted,
+			translation: {
+				messages: [{ ts: 1, type: "say", say: "plan_completion_result", text: "The plan.", partial: false }],
+				sessionEnded: false,
+				turnComplete: true,
+			},
+		})
+
+		await coordinator.handleSessionEvent(event)
+
+		expect(onPlanTurnCompleted).toHaveBeenCalledOnce()
+	})
+
 	it("posts state on turn end even when the turn-complete event carries NO messages", async () => {
 		// The `done` handler emits no transcript message, so a turn-complete event has
 		// messages.length === 0 while the phase changes to completed/awaiting_followup. State must
@@ -420,6 +436,7 @@ function makeCoordinator(input: Partial<MakeCoordinatorInput> = {}) {
 		getTurnPhase: vi.fn(() => input.turnPhase ?? "streaming"),
 		captureProviderApiError: vi.fn(),
 		beginProviderFailureTelemetryTurn: vi.fn(),
+		onPlanTurnCompleted: input.onPlanTurnCompleted,
 		translateSessionEvent: vi.fn(() => input.translation ?? { messages: [], sessionEnded: false, turnComplete: false }),
 		isClineFreeModel: input.isClineFreeModel,
 	} as unknown as SdkSessionEventCoordinatorOptions & {
@@ -455,6 +472,7 @@ function makeActiveSession(input: Partial<{ isRunning: boolean }> = {}) {
 
 interface MakeCoordinatorInput {
 	activeSession: ReturnType<typeof makeActiveSession>
+	onPlanTurnCompleted: () => void
 	task: { taskId: string }
 	turnPhase: "streaming" | "resumable"
 	isClineFreeModel: () => Promise<boolean>

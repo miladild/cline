@@ -50,7 +50,7 @@ Once the user has reviewed your plan and explicitly approved it in a follow-up m
  */
 export const PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH = `${PLAN_MODE_INSTRUCTIONS_BASE}
 
-Once you have presented your plan, end your turn and wait for the user's response. You do NOT have the ability to switch to act mode yourself -- the user must do it manually with the Plan/Act toggle once they are satisfied with the plan. If the task requires tools that are only available in act mode, ask the user to "toggle to Act mode" (use those words).`;
+Once you have presented your plan, end your turn and wait for the user's response. You do NOT have the ability to switch to act mode yourself -- the user must do it manually with the Plan/Act toggle once they are satisfied with the plan. If the task requires tools that are only available in act mode, ask the user to "toggle to Act mode" (use those words). If the user's message already asks you to plan and then implement, present the plan and end the turn without asking them to toggle. The host sends that plan to act mode.`;
 
 function redactRemoteUrlCredentials(remote: string): string {
 	const schemeEnd = remote.indexOf("://");

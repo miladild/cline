@@ -13,10 +13,15 @@ vi.mock("@/components/common/MarkdownBlock", () => ({
 
 const checkpointLatestChangesCount = vi.fn()
 
+const togglePlanActModeProto = vi.fn(() => Promise.resolve({}))
+
 vi.mock("@/services/grpc-client", () => ({
 	CheckpointsServiceClient: {
 		checkpointLatestChangesCount: (...args: unknown[]) => checkpointLatestChangesCount(...args),
 		checkpointViewLatestChanges: vi.fn(() => Promise.resolve({})),
+	},
+	StateServiceClient: {
+		togglePlanActModeProto: (...args: unknown[]) => togglePlanActModeProto(...args),
 	},
 }))
 
@@ -165,6 +170,20 @@ describe("PlanCompletionOutputRow", () => {
 
 		expect(screen.getByText("Plan")).toBeInTheDocument()
 		expect(screen.getByRole("button", { name: "Copy plan response" })).toBeInTheDocument()
+	})
+
+	it("sends the plan to act mode when Implement is clicked", () => {
+		render(<PlanCompletionOutputRow showImplement text="Here is the plan" />)
+
+		fireEvent.click(screen.getByRole("button", { name: "Implement" }))
+
+		expect(togglePlanActModeProto).toHaveBeenCalledTimes(1)
+	})
+
+	it("hides Implement until this is the plan the user can act on", () => {
+		render(<PlanCompletionOutputRow text="Here is the plan" />)
+
+		expect(screen.queryByRole("button", { name: "Implement" })).toBeNull()
 	})
 
 	it("copies the plan response text to the clipboard", async () => {

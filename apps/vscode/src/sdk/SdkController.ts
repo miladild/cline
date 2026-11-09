@@ -65,6 +65,7 @@ import { AuthService, LogoutReason } from "./auth-service"
 import { BUILTIN_SLASH_COMMANDS } from "./builtin-slash-commands"
 import { buildStartSessionInput, createHistoryItemFromSession } from "./cline-session-factory"
 import { MessageTranslatorState, reshapeErrorForWebview } from "./message-translator"
+import { userWantsPlanThenImplement } from "./plan-then-implement"
 import { createProviderCatalog } from "./model-catalog/catalog"
 import type { Disposable, ProviderCatalog, ProviderConfigChange, ProviderConfigStore } from "./model-catalog/contracts"
 import { parseProviderId } from "./model-catalog/provider-id"
@@ -770,6 +771,11 @@ export class Controller {
 			getTurnPhase: () => this.turnStateTracker.currentPhase,
 			captureProviderApiError: (event) => this.captureProviderFailure(event),
 			beginProviderFailureTelemetryTurn: () => this.beginProviderFailureTelemetryTurn(),
+			onPlanTurnCompleted: () => {
+				queueMicrotask(() => {
+					this.maybeAutoImplementPresentedPlan()
+				})
+			},
 		})
 		// Subscribe to MCP tool list changes so we can restart the SDK session
 		// when servers are added/removed/reconnected. The SDK's DefaultSessionBuilder
@@ -2215,6 +2221,23 @@ export class Controller {
 	}
 
 	// ---- Mode switching ----
+
+	private maybeAutoImplementPresentedPlan(): void {
+		if (this.stateManager.getGlobalSettingsKey("mode") !== "plan") {
+			return
+		}
+		const messages = this.task?.messageStateHandler.getClineMessages() ?? []
+		const userText = messages
+			.filter((message) => message.say === "task" || message.say === "user_feedback")
+			.map((message) => message.text ?? "")
+			.join("\n")
+		if (!userWantsPlanThenImplement(userText)) {
+			return
+		}
+		void this.mode.togglePlanActMode("act").catch((error) => {
+			Logger.error("[SdkController] Failed to hand the presented plan to act mode:", error)
+		})
+	}
 
 	async togglePlanActMode(modeToSwitchTo: Mode, chatContent?: ChatContent): Promise<boolean> {
 		return this.mode.togglePlanActMode(modeToSwitchTo, chatContent)

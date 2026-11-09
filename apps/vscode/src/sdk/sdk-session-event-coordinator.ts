@@ -39,6 +39,11 @@ export interface SdkSessionEventCoordinatorOptions {
 	getTurnPhase?: () => TurnPhase
 	captureProviderApiError?: (event: ProviderFailureTelemetry) => void
 	beginProviderFailureTelemetryTurn?: () => void
+	/**
+	 * A plan-mode turn just finished by presenting a plan. The controller may
+	 * hand that plan to act mode when the user already asked for implementation.
+	 */
+	onPlanTurnCompleted?: () => void
 }
 
 export class SdkSessionEventCoordinator {
@@ -124,6 +129,13 @@ export class SdkSessionEventCoordinator {
 					this.options.setTurnPhase?.("completed")
 				} else {
 					this.options.setTurnPhase?.("awaiting_followup")
+					if (
+						result.messages.some(
+							(message) => message.say === "plan_completion_result" && message.partial !== true,
+						)
+					) {
+						this.options.onPlanTurnCompleted?.()
+					}
 				}
 
 				this.options.sessions.setRunning(false)

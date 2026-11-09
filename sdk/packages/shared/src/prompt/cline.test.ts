@@ -78,6 +78,7 @@ describe("buildClineSystemPrompt mode instructions", () => {
 		// The read-only run_commands contract is shared by both variants.
 		expect(PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH).toContain("run_commands");
 		expect(PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH).toContain("Plan/Act toggle");
+		expect(PLAN_MODE_INSTRUCTIONS_MANUAL_SWITCH).toContain("plan and then implement");
 	});
 
 	it("explains mode tags when the mode defaults to act", () => {
