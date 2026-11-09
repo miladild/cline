@@ -1,19 +1,49 @@
-function parseModelIdList(input: unknown): string[] {
-	if (!Array.isArray(input)) return [];
-	return input
-		.map((item) => {
-			if (typeof item === "string") return item.trim();
-			if (item && typeof item === "object") {
-				const entry = item as { id?: unknown; name?: unknown; model?: unknown };
-				for (const value of [entry.id, entry.name, entry.model]) {
-					if (typeof value === "string" && value.trim()) {
-						return value.trim();
-					}
-				}
+export interface SourcedModel {
+	id: string;
+	supportsImages: boolean;
+}
+
+function readModelId(item: unknown): string {
+	if (typeof item === "string") return item.trim();
+	if (item && typeof item === "object") {
+		const entry = item as { id?: unknown; name?: unknown; model?: unknown };
+		for (const value of [entry.id, entry.name, entry.model]) {
+			if (typeof value === "string" && value.trim()) {
+				return value.trim();
 			}
-			return "";
-		})
-		.filter((id) => id.length > 0);
+		}
+	}
+	return "";
+}
+
+/**
+ * Ollama reports vision on `/api/tags` as `capabilities: ["vision"]`.
+ * Other catalogs use `images`. Either one means this model can take a screenshot.
+ */
+function entrySupportsImages(item: unknown): boolean {
+	if (!item || typeof item !== "object") return false;
+	const capabilities = (item as { capabilities?: unknown }).capabilities;
+	return (
+		Array.isArray(capabilities) &&
+		capabilities.some(
+			(capability) => capability === "vision" || capability === "images",
+		)
+	);
+}
+
+function parseModelIdList(input: unknown): string[] {
+	return parseSourcedModelList(input).map((model) => model.id);
+}
+
+function parseSourcedModelList(input: unknown): SourcedModel[] {
+	if (!Array.isArray(input)) return [];
+	const models: SourcedModel[] = [];
+	for (const item of input) {
+		const id = readModelId(item);
+		if (!id) continue;
+		models.push({ id, supportsImages: entrySupportsImages(item) });
+	}
+	return models;
 }
 
 export function extractModelIdsFromPayload(
@@ -52,17 +82,56 @@ export function extractModelIdsFromPayload(
 	return [];
 }
 
+export function extractSourcedModelsFromPayload(
+	payload: unknown,
+	providerId: string,
+): SourcedModel[] {
+	const rootArray = parseSourcedModelList(payload);
+	if (rootArray.length > 0) return rootArray;
+	if (!payload || typeof payload !== "object") return [];
+
+	const data = payload as {
+		data?: unknown;
+		models?: unknown;
+		providers?: Record<string, unknown>;
+	};
+
+	const direct = parseSourcedModelList(data.data ?? data.models);
+	if (direct.length > 0) return direct;
+
+	if (
+		data.models &&
+		typeof data.models === "object" &&
+		!Array.isArray(data.models)
+	) {
+		const keys = Object.keys(data.models).filter(
+			(key) => key.trim().length > 0,
+		);
+		if (keys.length > 0) {
+			return keys.map((id) => ({ id, supportsImages: false }));
+		}
+	}
+
+	const scoped = data.providers?.[providerId];
+	if (scoped && typeof scoped === "object") {
+		const nested = scoped as { models?: unknown };
+		const list = parseSourcedModelList(nested.models ?? scoped);
+		if (list.length > 0) return list;
+	}
+
+	return [];
+}
+
 export interface ModelSourceAuth {
 	baseUrl?: string;
 	apiKey?: string;
 	headers?: Record<string, string>;
 }
 
-export async function fetchModelIdsFromSource(
+async function fetchModelSourcePayload(
 	url: string,
-	providerId: string,
-	auth: ModelSourceAuth = {},
-): Promise<string[]> {
+	auth: ModelSourceAuth,
+): Promise<unknown> {
 	// A model source may be a third-party public catalog. Only send provider
 	// credentials to its own origin, and do not follow authenticated redirects.
 	const headers = new Headers();
@@ -96,8 +165,27 @@ export async function fetchModelIdsFromSource(
 			`failed to fetch models from ${url}: HTTP ${response.status}`,
 		);
 	}
+	return (await response.json()) as unknown;
+}
+
+export async function fetchModelIdsFromSource(
+	url: string,
+	providerId: string,
+	auth: ModelSourceAuth = {},
+): Promise<string[]> {
 	return extractModelIdsFromPayload(
-		(await response.json()) as unknown,
+		await fetchModelSourcePayload(url, auth),
+		providerId,
+	);
+}
+
+export async function fetchSourcedModelsFromSource(
+	url: string,
+	providerId: string,
+	auth: ModelSourceAuth = {},
+): Promise<SourcedModel[]> {
+	return extractSourcedModelsFromPayload(
+		await fetchModelSourcePayload(url, auth),
 		providerId,
 	);
 }

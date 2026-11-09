@@ -8,6 +8,7 @@ import {
 	normalizeOllamaBaseUrl,
 	OLLAMA_DEFAULT_TIMEOUT_MS,
 	readOllamaTimeoutMs,
+	stripOllamaImageDataUrls,
 	withOllamaResponseTimeout,
 } from "./ollama";
 
@@ -77,6 +78,23 @@ describe("readOllamaTimeoutMs", () => {
 		// Ollama only sends response headers once the model is loaded, so the
 		// response-start budget must cover a cold load (cline/cline#12829).
 		expect(OLLAMA_DEFAULT_TIMEOUT_MS).toBe(300_000);
+	});
+});
+
+describe("stripOllamaImageDataUrls", () => {
+	it("keeps the raw base64 payload Ollama accepts", () => {
+		const body = JSON.stringify({
+			messages: [
+				{
+					role: "user",
+					content: "what is this",
+					images: ["data:image/png;base64,aGVsbG8=", "already-raw"],
+				},
+			],
+		});
+		expect(JSON.parse(stripOllamaImageDataUrls(body)).messages[0].images).toEqual(
+			["aGVsbG8=", "already-raw"],
+		);
 	});
 });
 

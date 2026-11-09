@@ -88,6 +88,46 @@ export function readOllamaTimeoutMs(
  * Mirrors the legacy handler, which raced the chat call (stream start)
  * against a timeout rather than bounding the whole generation.
  */
+/**
+ * Ollama's native `/api/chat` rejects an image string that still has a
+ * `data:image/...;base64,` prefix. Keep only the raw payload.
+ */
+export function stripOllamaImageDataUrls(body: string): string {
+	let parsed: { messages?: Array<{ images?: unknown }> };
+	try {
+		parsed = JSON.parse(body) as { messages?: Array<{ images?: unknown }> };
+	} catch {
+		return body;
+	}
+	if (!Array.isArray(parsed.messages)) return body;
+	let changed = false;
+	for (const message of parsed.messages) {
+		if (!Array.isArray(message?.images)) continue;
+		message.images = message.images.map((image) => {
+			if (typeof image !== "string" || !image.startsWith("data:")) {
+				return image;
+			}
+			const comma = image.indexOf(",");
+			if (comma === -1) return image;
+			changed = true;
+			return image.slice(comma + 1);
+		});
+	}
+	return changed ? JSON.stringify(parsed) : body;
+}
+
+function withRawOllamaImages(baseFetch: typeof fetch): typeof fetch {
+	return (async (input, init) => {
+		if (typeof init?.body !== "string" || !init.body.includes("data:")) {
+			return baseFetch(input, init);
+		}
+		return baseFetch(input, {
+			...init,
+			body: stripOllamaImageDataUrls(init.body),
+		});
+	}) as typeof fetch;
+}
+
 export function withOllamaResponseTimeout(
 	baseFetch: typeof fetch,
 	timeoutMs: number,
@@ -137,7 +177,7 @@ export async function createOllamaProviderModule(
 		...(Object.keys(headers).length > 0 ? { headers } : {}),
 		compatibility: "strict",
 		fetch: withOllamaResponseTimeout(
-			ensureFetch(config.fetch),
+			withRawOllamaImages(ensureFetch(config.fetch)),
 			readOllamaTimeoutMs(config),
 		),
 	});

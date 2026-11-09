@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	clearLiveModelsCatalogCache,
 	clearPrivateModelsCatalogCache,
+	clearPublicModelsCatalogCache,
 	getLiveModelsCatalog,
 	isPrivateModelCatalogProvider,
 	resolveProviderConfig,
@@ -11,6 +12,7 @@ import {
 afterEach(() => {
 	clearLiveModelsCatalogCache();
 	clearPrivateModelsCatalogCache();
+	clearPublicModelsCatalogCache();
 	vi.unstubAllGlobals();
 	vi.restoreAllMocks();
 });
@@ -645,6 +647,51 @@ describe("resolveProviderConfig", () => {
 			{ method: "GET", signal: expect.any(AbortSignal) },
 		);
 		expect(Object.keys(resolved?.knownModels ?? {})).toEqual(["local-llama"]);
+		expect(resolved?.knownModels?.["local-llama"]?.capabilities).not.toContain(
+			"images",
+		);
+	});
+
+	it("marks only Ollama models that report vision as image capable", async () => {
+		const fetchMock = vi.fn(async () => {
+			return new Response(
+				JSON.stringify({
+					models: [
+						{
+							name: "huihui_ai/gemma-4-abliterated:12b-qat",
+							capabilities: ["completion", "vision", "tools"],
+						},
+						{
+							name: "hub/qwen3-coder:30b",
+							capabilities: ["completion", "tools"],
+						},
+					],
+				}),
+				{
+					status: 200,
+					headers: { "content-type": "application/json" },
+				},
+			);
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const resolved = await resolveProviderConfig(
+			"ollama",
+			{ failOnError: false, cacheTtlMs: 0 },
+			{
+				providerId: "ollama",
+				modelId: "",
+				baseUrl: "http://127.0.0.1:11434",
+			},
+		);
+
+		expect(
+			resolved?.knownModels?.["huihui_ai/gemma-4-abliterated:12b-qat"]
+				?.capabilities,
+		).toContain("images");
+		expect(
+			resolved?.knownModels?.["hub/qwen3-coder:30b"]?.capabilities,
+		).not.toContain("images");
 	});
 
 	it("loads Poolside models from the authenticated models endpoint", async () => {
